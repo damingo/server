@@ -394,7 +394,7 @@ export class BaseServer {
         concurrencyLimit: 10, // Limits zlib concurrency for perf.
         threshold: 1024 // Size (in bytes) below which messages
         // should not be compressed.
-      }
+      },
       server: this.http 
     })
     
