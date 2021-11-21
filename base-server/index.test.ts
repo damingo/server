@@ -49,9 +49,7 @@ function createServer(
 let destroyable: BaseServer | undefined
 let httpServer: http.Server | undefined
 
-function createReporter(
-  opts: Partial<BaseServerOptions> = {}
-): {
+function createReporter(opts: Partial<BaseServerOptions> = {}): {
   app: BaseServer<{}, TestLog<ServerMeta>>
   names: string[]
   reports: [string, any][]
@@ -81,9 +79,9 @@ async function catchError(cb: () => Promise<any>): Promise<Error> {
   try {
     await cb()
   } catch (e) {
-    return e
+    if (e instanceof Error) return e
   }
-  throw new Error('Error was not thown')
+  throw new Error('Error was not thrown')
 }
 
 afterEach(async () => {
@@ -229,7 +227,7 @@ it('uses HTTPS', async () => {
     key: readFileSync(KEY).toString()
   })
   await app.listen()
-  expect(privateMethods(app).http instanceof https.Server).toBe(true)
+  expect(privateMethods(app).httpServer instanceof https.Server).toBe(true)
 })
 
 it('loads keys by absolute path', async () => {
@@ -238,7 +236,7 @@ it('loads keys by absolute path', async () => {
     key: KEY
   })
   await app.listen()
-  expect(privateMethods(app).http instanceof https.Server).toBe(true)
+  expect(privateMethods(app).httpServer instanceof https.Server).toBe(true)
 })
 
 it('loads keys by relative path', async () => {
@@ -248,7 +246,7 @@ it('loads keys by relative path', async () => {
     key: 'fixtures/key.pem'
   })
   await app.listen()
-  expect(privateMethods(app).http instanceof https.Server).toBe(true)
+  expect(privateMethods(app).httpServer instanceof https.Server).toBe(true)
 })
 
 it('supports object in SSL key', async () => {
@@ -257,7 +255,7 @@ it('supports object in SSL key', async () => {
     key: { pem: readFileSync(KEY).toString() }
   })
   await app.listen()
-  expect(privateMethods(app).http instanceof https.Server).toBe(true)
+  expect(privateMethods(app).httpServer instanceof https.Server).toBe(true)
 })
 
 it('reporters on start listening', async () => {
@@ -1422,4 +1420,14 @@ it('subscribes clients manually', async () => {
   app.subscribe('test:1:1', 'users/10')
   await delay(10)
   expect(actions).toEqual([{ type: 'logux/subscribed', channel: 'users/10' }])
+})
+
+it('processes action with accessAndProcess callback', () => {
+  let test = createReporter()
+  let accessAndProcess = jest.fn(() => {})
+  test.app.type('A', {
+    accessAndProcess
+  })
+  test.app.process({ type: 'A' })
+  expect(accessAndProcess).toHaveBeenCalledTimes(1)
 })

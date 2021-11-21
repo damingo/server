@@ -14,6 +14,7 @@ import { createHttpServer } from '../create-http-server/index.js'
 import { ServerClient } from '../server-client/index.js'
 import { Context } from '../context/index.js'
 
+const SKIP_PROCESS = Symbol('skipProcess')
 const RESEND_META = ['channels', 'users', 'clients', 'nodes']
 
 function optionError(msg) {
@@ -48,10 +49,14 @@ export async function wasNot403(cb) {
 
 function normalizeTypeCallbacks(name, callbacks) {
   if (callbacks && callbacks.accessAndProcess) {
-    callbacks.access = (...args) => {
+    callbacks.access = (ctx, ...args) => {
       return wasNot403(async () => {
-        await callbacks.accessAndProcess(...args)
+        await callbacks.accessAndProcess(ctx, ...args)
+        ctx[SKIP_PROCESS] = true
       })
+    }
+    callbacks.process = async (ctx, ...args) => {
+      if (!ctx[SKIP_PROCESS]) await callbacks.accessAndProcess(ctx, ...args)
     }
   }
   if (!callbacks || !callbacks.access) {
@@ -373,8 +378,8 @@ export class BaseServer {
     if (!this.authenticator) {
       throw new Error('You must set authentication callback by server.auth()')
     }
-    this.http = await createHttpServer(this.options)
-    // this.ws = new WebSocket.Server({ server: this.http })
+    this.httpServer = await createHttpServer(this.options)
+    //this.ws = new WebSocket.Server({ server: this.httpServer })
     this.ws = new WebSocket.Server({
       perMessageDeflate: {
         zlibDeflateOptions: {
@@ -395,13 +400,13 @@ export class BaseServer {
         threshold: 1024 // Size (in bytes) below which messages
         // should not be compressed.
       },
-      server: this.http 
+      server: this.httpServer 
     })
-    
+
     if (!this.options.server) {
       await new Promise((resolve, reject) => {
         this.ws.on('error', reject)
-        this.http.listen(this.options.port, this.options.host, resolve)
+        this.httpServer.listen(this.options.port, this.options.host, resolve)
       })
     }
     bindControlServer(this, this.httpListener)
@@ -413,12 +418,12 @@ export class BaseServer {
           this.ws.close()
         })
     )
-    if (this.http) {
+    if (this.httpServer) {
       this.unbind.push(
         () =>
           new Promise(resolve => {
-            this.http.on('close', resolve)
-            this.http.close()
+            this.httpServer.on('close', resolve)
+            this.httpServer.close()
           })
       )
     }
@@ -561,7 +566,7 @@ export class BaseServer {
     }
   }
 
-  sendAction(action, meta) {
+  async sendAction(action, meta) {
     let from = parseId(meta.id).clientId
     let ignoreClients = new Set(meta.excludeClients || [])
     ignoreClients.add(from)
@@ -612,7 +617,7 @@ export class BaseServer {
                 let filter = subscriber.filter
                 if (typeof filter === 'function') {
                   if (!ctx) ctx = this.createContext(action, meta)
-                  filter = filter(ctx, action, meta)
+                  filter = await filter(ctx, action, meta)
                 }
                 let client = this.clientIds.get(clientId)
                 if (filter && client) {

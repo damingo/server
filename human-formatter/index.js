@@ -1,19 +1,6 @@
-import {
-  green,
-  bgGreen,
-  yellow,
-  bgYellow,
-  red,
-  bgRed,
-  black,
-  white,
-  gray,
-  dim,
-  bold,
-  options as colorette
-} from 'colorette'
 import stripAnsi from 'strip-ansi'
 import yyyymmdd from 'yyyy-mm-dd'
+import pico from 'picocolors'
 import path from 'path'
 import os from 'os'
 
@@ -183,25 +170,8 @@ function prettyStackTrace(c, stack, basepath) {
 }
 
 export function humanFormatter(options) {
-  let c = {
-    green,
-    bgGreen,
-    yellow,
-    bgYellow,
-    red,
-    bgRed,
-    black,
-    white,
-    gray,
-    dim,
-    bold
-  }
-  this.color = true
-  if (options.color === false || !colorette.enabled) {
-    this.color = false
-    let empty = str => str
-    for (let color in c) c[color] = empty
-  }
+  let c = pico.createColors(options.color)
+  this.color = c.isColorSupported
   let basepath = options.basepath || process.cwd()
   if (basepath.slice(-1) !== path.sep) basepath += path.sep
   this.basepath = basepath

@@ -1,6 +1,25 @@
 # Change Log
 This project adheres to [Semantic Versioning](http://semver.org/).
 
+## 0.10.6
+* Fixed `Promise` support in channel’s `filter` (by Eduard Aksamitov).
+* Replaced `nanocolors` with `picocolors`.
+
+## 0.10.5
+* Fixed `Server#http()`.
+* Fixed types (by Eduard Aksamitov).
+
+## 0.10.4
+* Updated `nanocolors`.
+
+## 0.10.3
+* Replaced `colorette` with `nanocolors`.
+
+## 0.10.2
+* Fixed `accessAndProcess` on server’s action (by Aleksandr Slepchenkov).
+* Added warning about circular reference in action.
+* Marked `action` and `meta` in callbacks as read-only.
+
 ## 0.10.1
 * Fixed channel name parameters parsing (by Aleksandr Slepchenkov).
 * Used `LoguxNotFoundError` from `@logux/actions`.

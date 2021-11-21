@@ -11,12 +11,13 @@ afterEach(() => {
 })
 
 async function catchError(cb: () => Promise<any>): Promise<LoguxActionError> {
-  let err
+  let err: LoguxActionError | undefined
   try {
     await cb()
   } catch (e) {
-    err = e
+    err = e as LoguxActionError
   }
+  if (!err) throw new Error('Error was no thrown')
   return err
 }
 
@@ -155,7 +156,7 @@ it('tracks action processing', async () => {
   )
 })
 
-it('detects action ID dublicate', async () => {
+it('detects action ID duplicate', async () => {
   server = new TestServer()
   server.type('FOO', {
     access: () => true
