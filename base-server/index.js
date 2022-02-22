@@ -380,8 +380,8 @@ export class BaseServer {
     }
     this.httpServer = await createHttpServer(this.options)
 
-    //this.ws = new WebSocket.Server({ server: this.httpServer })
-    this.ws = new WebSocket.Server({
+    // this.ws = new WebSocketServer({ server: this.httpServer })
+    this.ws = new WebSocketServer({
       perMessageDeflate: {
         zlibDeflateOptions: {
           // See zlib defaults.
