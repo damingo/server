@@ -154,6 +154,25 @@ it('tracks action processing', async () => {
   expect(noReasonError.message).toEqual(
     'Server does not have callbacks for UNKNOWN actions'
   )
+
+  await server.expectError('test', async () => {
+    await client.process({ type: 'ERR' })
+  })
+  await server.expectError(/te/, async () => {
+    await client.process({ type: 'ERR' })
+  })
+  let wrongMessageError = await catchError(async () => {
+    await server.expectError('te', async () => {
+      await client.process({ type: 'ERR' })
+    })
+  })
+  expect(wrongMessageError.message).toEqual('test')
+  let noErrorError = await catchError(async () => {
+    await server.expectError('te', async () => {
+      await client.process({ type: 'FOO' })
+    })
+  })
+  expect(noErrorError.message).toEqual('Actions passed without error')
 })
 
 it('detects action ID duplicate', async () => {
@@ -178,7 +197,7 @@ it('tracks subscriptions', async () => {
   server.channel<{}, {}, LoguxSubscribeAction>('foo', {
     access: () => true,
     load(ctx, action) {
-      ctx.sendBack({ type: 'FOO', a: action.filter?.a })
+      ctx.sendBack({ type: 'FOO', a: action.filter?.a, since: action.since })
     }
   })
   let client = await server.connect('10')
@@ -191,15 +210,21 @@ it('tracks subscriptions', async () => {
   let actions2 = await client.subscribe('foo', { a: 1 })
   expect(actions2).toEqual([{ type: 'FOO', a: 1 }])
 
+  let actions3 = await client.subscribe('foo', undefined, {
+    id: '1 1:0:0',
+    time: 1
+  })
+  expect(actions3).toEqual([{ type: 'FOO', since: { id: '1 1:0:0', time: 1 } }])
+
   await client.unsubscribe('foo', { a: 1 })
   expect(privateMethods(server).subscribers).toEqual({})
 
-  let actions3 = await client.subscribe({
+  let actions4 = await client.subscribe({
     type: 'logux/subscribe',
     channel: 'foo',
     filter: { a: 2 }
   })
-  expect(actions3).toEqual([{ type: 'FOO', a: 2 }])
+  expect(actions4).toEqual([{ type: 'FOO', a: 2 }])
 
   let unknownError = await catchError(() => client.subscribe('unknown'))
   expect(unknownError.message).toEqual(

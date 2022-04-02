@@ -105,9 +105,9 @@ const REPORTERS = {
 
   add: () => ({ msg: 'Action was added' }),
 
-  clean: () => ({ msg: 'Action was cleaned' }),
+  addClean: () => ({ msg: 'Action was added and cleaned' }),
 
-  processed: () => ({ msg: 'Action was processed' }),
+  clean: () => ({ msg: 'Action was cleaned' }),
 
   subscribed: () => ({ msg: 'Client was subscribed' }),
 
