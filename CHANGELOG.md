@@ -1,6 +1,20 @@
 # Change Log
 This project adheres to [Semantic Versioning](http://semver.org/).
 
+## 0.12.2
+* Fixed `since` in `load` of `addSyncMap` (by Nikita Galaiko).
+
+## 0.12.1
+* Fixed `since` in `initial` of `addSyncMapFilter` (by Nikita Galaiko).
+
+## 0.12 “Looks to the Moon”
+* Dropped Node.js 12 support.
+* Moved to Logux Core 0.8.
+* Moved to `pino` 8.
+* Added `disableHttpServer` option.
+* Added `return false` support to `load` callback in `addSyncMap`.
+* Fixed data loading on subscription on `SyncMap` creation.
+
 ## 0.11 “Five Pebbles”
 * Added `addSyncMap()` and `addSyncMapFilter()`.
 * Added colorization to action ID and client ID (by Bijela Gora).

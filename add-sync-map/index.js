@@ -94,19 +94,23 @@ export function addSyncMap(server, plural, operations) {
         return operations.access(ctx, ctx.params.id, action, meta)
       },
       async load(ctx, action, meta) {
+        if (action.creating) return
+        let since = action.since ? action.since.time : 0
         let data = await operations.load(
           ctx,
           ctx.params.id,
-          action.since,
+          since,
           action,
           meta
         )
-        await sendMap(
-          server,
-          changedType,
-          data,
-          action.since ? action.since.time : 0
-        )
+        if (data !== false) {
+          await sendMap(
+            server,
+            changedType,
+            data,
+            since
+          )
+        }
       }
     })
   }
@@ -185,14 +189,14 @@ export function addSyncMapFilter(server, plural, operations) {
       }
     },
     async load(ctx, action, meta) {
+      let since = action.since ? action.since.time : 0
       let data = await operations.initial(
         ctx,
         action.filter,
-        action.since,
+        since,
         action,
         meta
       )
-      let since = action.since ? action.since.time : 0
       await Promise.all(
         data.map(async i => {
           await server.subscribe(ctx.nodeId, `${plural}/${i.id}`)
