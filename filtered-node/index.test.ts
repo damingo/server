@@ -1,4 +1,5 @@
-import { ClientNode, TestPair, TestTime, TestLog } from '@logux/core'
+import { ClientNode, type TestLog, TestPair, TestTime } from '@logux/core'
+import { afterEach, expect, it } from 'vitest'
 
 import { FilteredNode } from '../filtered-node/index.js'
 
@@ -19,7 +20,7 @@ function createTest(): Test {
     meta.reasons.push('test')
   })
 
-  let data = { nodeId: '1:a:b', userId: '1', clientId: '1:a' }
+  let data = { clientId: '1:a', nodeId: '1:a:b', userId: '1' }
   let pair = new TestPair()
   let client = new ClientNode('1:a:b', log1, pair.left)
   let server = new FilteredNode(data, 'server', log2, pair.right)

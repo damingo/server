@@ -1,6 +1,19 @@
 # Change Log
 This project adheres to [Semantic Versioning](http://semver.org/).
 
+## 0.12.6
+* Fixed `x/changed` filter in `addSyncMap` (by Eduard Aksamitov).
+
+## 0.12.5
+* Fixed async action’s filter in channel (by Eduard Aksamitov).
+
+## 0.12.4
+* Fixed docs.
+
+## 0.12.3
+* Fixed multiple subscriptions with filters per node (by Eduard Aksamitov).
+* Fixed types (by Nikita Galaiko).
+
 ## 0.12.2
 * Fixed `since` in `load` of `addSyncMap` (by Nikita Galaiko).
 

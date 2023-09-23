@@ -1,3 +1,5 @@
+import { expect, it } from 'vitest'
+
 import { ALLOWED_META } from '../index.js'
 
 it('has allowed meta keys list', () => {

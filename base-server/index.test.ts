@@ -1,15 +1,26 @@
-import { MemoryStore, TestTime, Log, Action, TestLog } from '@logux/core'
 import { defineAction } from '@logux/actions'
-import { fileURLToPath } from 'url'
+import {
+  type Action,
+  Log,
+  MemoryStore,
+  type TestLog,
+  TestTime
+} from '@logux/core'
 import { readFileSync } from 'fs'
-import { delay } from 'nanodelay'
-import WebSocket from 'ws'
-import { jest } from '@jest/globals'
-import { join } from 'path'
-import https from 'https'
 import http from 'http'
+import https from 'https'
+import { delay } from 'nanodelay'
+import { restoreAll, spy, type Spy, spyOn } from 'nanospy'
+import { join } from 'path'
+import { fileURLToPath } from 'url'
+import { afterEach, expect, it } from 'vitest'
+import WebSocket from 'ws'
 
-import { BaseServer, BaseServerOptions, ServerMeta } from '../index.js'
+import {
+  BaseServer,
+  type BaseServerOptions,
+  type ServerMeta
+} from '../index.js'
 
 const ROOT = join(fileURLToPath(import.meta.url), '..', '..')
 
@@ -87,7 +98,20 @@ async function catchError(cb: () => Promise<any>): Promise<Error> {
   throw new Error('Error was not thrown')
 }
 
+function calls(fn: Function | undefined): any[][] {
+  return (fn as any as Spy).calls
+}
+
+function called(fn: Function | undefined): boolean {
+  return (fn as any as Spy).called
+}
+
+function callCount(fn: Function | undefined): number {
+  return (fn as any as Spy).callCount
+}
+
 afterEach(async () => {
+  restoreAll()
   process.env.NODE_ENV = originEnv
   if (destroyable) {
     await destroyable.destroy()
@@ -138,9 +162,9 @@ it('takes environment from NODE_ENV', () => {
 
 it('sets environment from user', () => {
   let app = new BaseServer({
+    env: 'production',
     subprotocol: '0.0.0',
-    supports: '0.x',
-    env: 'production'
+    supports: '0.x'
   })
   expect(app.env).toEqual('production')
 })
@@ -152,9 +176,9 @@ it('uses cwd as default root', () => {
 
 it('uses user root', () => {
   let app = new BaseServer({
+    root: '/a',
     subprotocol: '0.0.0',
-    supports: '0.x',
-    root: '/a'
+    supports: '0.x'
   })
   expect(app.options.root).toEqual('/a')
 })
@@ -168,9 +192,9 @@ it('creates log with default store', () => {
 it('creates log with custom store', () => {
   let store = new MemoryStore()
   let app = new BaseServer({
+    store,
     subprotocol: '0.0.0',
-    supports: '0.x',
-    store
+    supports: '0.x'
   })
   expect(app.log.store).toBe(store)
 })
@@ -178,11 +202,11 @@ it('creates log with custom store', () => {
 it('uses test time and ID', () => {
   let store = new MemoryStore()
   let app = new BaseServer({
+    id: 'uuid',
+    store,
     subprotocol: '0.0.0',
     supports: '0.x',
-    store,
-    time: new TestTime(),
-    id: 'uuid'
+    time: new TestTime()
   })
   expect(app.log.store).toEqual(store)
   expect(app.log.generateId()).toEqual('1 server:uuid 0')
@@ -244,9 +268,9 @@ it('loads keys by absolute path', async () => {
 
 it('loads keys by relative path', async () => {
   let app = createServer({
-    root: join(ROOT, 'test/'),
     cert: 'fixtures/cert.pem',
-    key: 'fixtures/key.pem'
+    key: 'fixtures/key.pem',
+    root: join(ROOT, 'test/')
   })
   await app.listen()
   expect(privateMethods(app).httpServer instanceof https.Server).toBe(true)
@@ -263,8 +287,8 @@ it('supports object in SSL key', async () => {
 
 it('reporters on start listening', async () => {
   let test = createReporter({
-    controlSecret: 'secret',
     backend: 'http://127.0.0.1:3000/logux',
+    controlSecret: 'secret',
     redis: '//localhost'
   })
   let pkgFile = readFileSync(join(ROOT, 'package.json'))
@@ -281,22 +305,22 @@ it('reporters on start listening', async () => {
     [
       'listen',
       {
-        controlSecret: 'secret',
-        controlMask: '127.0.0.1/8',
-        loguxServer: pkg.version,
-        environment: 'test',
-        subprotocol: '0.0.0',
-        supports: '0.x',
         backend: 'http://127.0.0.1:3000/logux',
+        cert: false,
+        controlMask: '127.0.0.1/8',
+        controlSecret: 'secret',
+        environment: 'test',
+        host: '127.0.0.1',
+        loguxServer: pkg.version,
         nodeId: 'server:uuid',
-        server: false,
-        redis: '//localhost',
         notes: {
           prometheus: 'http://127.0.0.1:31338/prometheus'
         },
-        cert: false,
-        host: '127.0.0.1',
-        port: test.app.options.port
+        port: test.app.options.port,
+        redis: '//localhost',
+        server: false,
+        subprotocol: '0.0.0',
+        supports: '0.x'
       }
     ]
   ])
@@ -317,11 +341,11 @@ it('reporters on log events', async () => {
           type: 'A'
         },
         meta: {
-          id: '1 server:uuid 0',
           added: 1,
+          id: '1 server:uuid 0',
           reasons: ['some'],
-          status: 'waiting',
           server: 'server:uuid',
+          status: 'waiting',
           subprotocol: '0.0.0',
           time: 1
         }
@@ -336,8 +360,8 @@ it('reporters on log events', async () => {
         meta: {
           id: '2 server:uuid 0',
           reasons: [],
-          status: 'waiting',
           server: 'server:uuid',
+          status: 'waiting',
           subprotocol: '0.0.0',
           time: 2
         }
@@ -395,14 +419,14 @@ it('sends debug message to clients on runtimeError', () => {
   app.connected.set('1', {
     connection: {
       connected: true,
-      send: jest.fn()
+      send: spy()
     },
     destroy: () => false
   } as any)
   app.connected.set('2', {
     connection: {
       connected: false,
-      send: jest.fn()
+      send: spy()
     },
     destroy: () => false
   } as any)
@@ -420,19 +444,17 @@ it('sends debug message to clients on runtimeError', () => {
   error.stack = `${error.stack?.split('\n')[0]}\nfake stacktrace`
 
   app.debugError(error)
-  expect(app.connected.get('1')?.connection.send).toHaveBeenCalledWith([
-    'debug',
-    'error',
-    'Error: Test Error\n' + 'fake stacktrace'
+  expect(calls(app.connected.get('1')?.connection.send)).toEqual([
+    [['debug', 'error', 'Error: Test Error\n' + 'fake stacktrace']]
   ])
-  expect(app.connected.get('2')?.connection.send).not.toHaveBeenCalled()
+  expect(called(app.connected.get('2')?.connection.send)).toBe(false)
 })
 
 it('disconnects client on destroy', () => {
   let app = createServer()
-  app.connected.set('1', { destroy: jest.fn() } as any)
+  app.connected.set('1', { destroy: spy() } as any)
   app.destroy()
-  expect(app.connected.get('1')?.destroy).toHaveBeenCalledTimes(1)
+  expect(callCount(app.connected.get('1')?.destroy)).toEqual(1)
 })
 
 it('accepts custom HTTP server', async () => {
@@ -478,7 +500,7 @@ it('marks actions with waiting status', async () => {
 
   await app.log.add({ type: 'A' })
   await app.log.add({ type: 'A' }, { status: 'processed' })
-  await app.log.add({ type: 'logux/subscribe', channel: 'a' })
+  await app.log.add({ channel: 'a', type: 'logux/subscribe' })
   expect(statuses).toEqual(['waiting', 'processed', undefined])
 })
 
@@ -521,7 +543,7 @@ it('ignores unknown type for processed actions', async () => {
   let test = createReporter()
   await test.app.log.add(
     { type: 'A' },
-    { status: 'processed', channels: ['a'] }
+    { channels: ['a'], status: 'processed' }
   )
   expect(test.names).toEqual(['addClean'])
 })
@@ -538,7 +560,7 @@ it('reports about fatal error', () => {
 it('sends errors to clients in development', () => {
   let test = createReporter({ env: 'development' })
   test.app.connected.set('0', {
-    connection: { connected: true, send: jest.fn() },
+    connection: { connected: true, send: spy() },
     destroy: () => false
   } as any)
 
@@ -548,21 +570,19 @@ it('sends errors to clients in development', () => {
   emit(test.app, 'error', err)
 
   expect(test.reports).toEqual([['error', { err, nodeId: '10:uuid' }]])
-  expect(test.app.connected.get('0')?.connection.send).toHaveBeenCalledWith([
-    'debug',
-    'error',
-    'stack'
+  expect(calls(test.app.connected.get('0')?.connection.send)).toEqual([
+    [['debug', 'error', 'stack']]
   ])
 })
 
 it('does not send errors in non-development mode', () => {
   let app = createServer({ env: 'production' })
   app.connected.set('0', {
-    connection: { send: jest.fn() },
+    connection: { send: spy() },
     destroy: () => false
   } as any)
   emit(app, 'error', new Error('Test'))
-  expect(app.connected.get('0')?.connection.send).not.toHaveBeenCalled()
+  expect(called(app.connected.get('0')?.connection.send)).toBe(false)
 })
 
 it('processes actions', async () => {
@@ -643,7 +663,7 @@ it('waits for last processing before destroy', async () => {
   let app = createServer()
 
   let started = 0
-  let process: undefined | (() => void)
+  let process: (() => void) | undefined
 
   app.type('FOO', {
     access: () => true,
@@ -697,10 +717,10 @@ it('reports about error during action processing', async () => {
     }
   ])
   expect(test.reports[2][1].action).toEqual({
-    type: 'logux/undo',
-    reason: 'error',
+    action: { type: 'FOO' },
     id: '1 server:uuid 0',
-    action: { type: 'FOO' }
+    reason: 'error',
+    type: 'logux/undo'
   })
 })
 
@@ -709,16 +729,16 @@ it('undoes actions on client', async () => {
   app.undo(
     { type: 'FOO' },
     {
-      id: '1 1:client:uuid 0',
-      time: 1,
       added: 1,
-      users: ['3'],
-      nodes: ['2:client:uuid'],
-      server: 'server:uuid',
-      clients: ['2:client'],
-      reasons: ['user/1/lastValue'],
       channels: ['user/1'],
-      excludeClients: ['3:client']
+      clients: ['2:client'],
+      excludeClients: ['3:client'],
+      id: '1 1:client:uuid 0',
+      nodes: ['2:client:uuid'],
+      reasons: ['user/1/lastValue'],
+      server: 'server:uuid',
+      time: 1,
+      users: ['3']
     },
     'magic',
     {
@@ -734,22 +754,22 @@ it('undoes actions on client', async () => {
         },
         id: '1 1:client:uuid 0',
         one: 1,
-        type: 'logux/undo',
-        reason: 'magic'
+        reason: 'magic',
+        type: 'logux/undo'
       },
       {
-        id: '1 server:uuid 0',
-        time: 1,
         added: 1,
-        users: ['3'],
+        channels: ['user/1'],
+        clients: ['2:client', '1:client'],
+        excludeClients: ['3:client'],
+        id: '1 server:uuid 0',
         nodes: ['2:client:uuid'],
+        reasons: ['user/1/lastValue'],
         server: 'server:uuid',
         status: 'processed',
-        clients: ['2:client', '1:client'],
-        reasons: ['user/1/lastValue'],
-        channels: ['user/1'],
         subprotocol: '0.0.0',
-        excludeClients: ['3:client']
+        time: 1,
+        users: ['3']
       }
     ]
   ])
@@ -772,7 +792,7 @@ it('adds current subprotocol only to own actions', async () => {
 it('allows to override subprotocol in meta', async () => {
   let app = createServer({ subprotocol: '1.0.0' })
   app.type('A', { access: () => true })
-  await app.log.add({ type: 'A' }, { subprotocol: '0.1.0', reasons: ['test'] })
+  await app.log.add({ type: 'A' }, { reasons: ['test'], subprotocol: '0.1.0' })
   expect(app.log.entries()[0][1].subprotocol).toEqual('0.1.0')
 })
 
@@ -794,7 +814,7 @@ it('reports about wrong channel name', async () => {
   let test = createReporter({ env: 'development' })
   test.app.channel('foo', { access: () => true })
   let client: any = {
-    connection: { send: jest.fn() },
+    connection: { send: spy() },
     node: { onAdd() {} }
   }
   test.app.nodeIds.set('10:uuid', client)
@@ -806,15 +826,13 @@ it('reports about wrong channel name', async () => {
     channel: undefined
   })
   expect(test.reports[2][1].action).toEqual({
+    action: { type: 'logux/subscribe' },
     id: '1 10:uuid 0',
     reason: 'wrongChannel',
-    type: 'logux/undo',
-    action: { type: 'logux/subscribe' }
+    type: 'logux/undo'
   })
-  expect(client.connection.send).toHaveBeenCalledWith([
-    'debug',
-    'error',
-    'Wrong channel name undefined'
+  expect(calls(client.connection.send)).toEqual([
+    [['debug', 'error', 'Wrong channel name undefined']]
   ])
   await test.app.log.add({ type: 'logux/unsubscribe' })
 
@@ -825,7 +843,7 @@ it('reports about wrong channel name', async () => {
       channel: undefined
     }
   ])
-  await test.app.log.add({ type: 'logux/subscribe', channel: 'unknown' })
+  await test.app.log.add({ channel: 'unknown', type: 'logux/subscribe' })
 
   expect(test.reports[7]).toEqual([
     'wrongChannel',
@@ -861,12 +879,12 @@ it('allows to have custom channel name check', async () => {
     }
   })
   let client: any = {
-    connection: { send: jest.fn() },
+    connection: { send() {} },
     node: { onAdd() {} }
   }
   test.app.nodeIds.set('10:uuid', client)
   test.app.clientIds.set('10:uuid', client)
-  await test.app.log.add({ type: 'logux/subscribe', channel: 'foo' })
+  await test.app.log.add({ channel: 'foo', type: 'logux/subscribe' })
   expect(channels).toEqual(['foo'])
   expect(test.names).toEqual(['addClean', 'wrongChannel', 'addClean'])
 })
@@ -881,7 +899,7 @@ it('ignores subscription for other servers', async () => {
 it('checks channel access', async () => {
   let test = createReporter()
   let client: any = {
-    node: { remoteSubprotocol: '0.0.0', onAdd: () => false }
+    node: { onAdd: () => false, remoteSubprotocol: '0.0.0' }
   }
   test.app.nodeIds.set('10:uuid', client)
   test.app.clientIds.set('10:uuid', client)
@@ -899,7 +917,7 @@ it('checks channel access', async () => {
   })
 
   await test.app.log.add(
-    { type: 'logux/subscribe', channel: 'user/10' },
+    { channel: 'user/10', type: 'logux/subscribe' },
     { id: '1 10:uuid 0' }
   )
   await delay(1)
@@ -907,10 +925,10 @@ it('checks channel access', async () => {
   expect(test.names).toEqual(['addClean', 'denied', 'addClean'])
   expect(test.reports[1][1]).toEqual({ actionId: '1 10:uuid 0' })
   expect(test.reports[2][1].action).toEqual({
-    type: 'logux/undo',
+    action: { channel: 'user/10', type: 'logux/subscribe' },
     id: '1 10:uuid 0',
     reason: 'denied',
-    action: { type: 'logux/subscribe', channel: 'user/10' }
+    type: 'logux/undo'
   })
   expect(test.app.subscribers).toEqual({})
   expect(finalled).toEqual(1)
@@ -919,7 +937,7 @@ it('checks channel access', async () => {
 it('reports about errors during channel authorization', async () => {
   let test = createReporter()
   let client: any = {
-    node: { remoteSubprotocol: '0.0.0', onAdd: () => false }
+    node: { onAdd: () => false, remoteSubprotocol: '0.0.0' }
   }
   test.app.nodeIds.set('10:uuid', client)
   test.app.clientIds.set('10:uuid', client)
@@ -932,7 +950,7 @@ it('reports about errors during channel authorization', async () => {
   })
 
   await test.app.log.add(
-    { type: 'logux/subscribe', channel: 'user/10' },
+    { channel: 'user/10', type: 'logux/subscribe' },
     { id: '1 10:uuid 0' }
   )
   await Promise.resolve()
@@ -941,10 +959,10 @@ it('reports about errors during channel authorization', async () => {
   expect(test.names).toEqual(['addClean', 'error', 'addClean'])
   expect(test.reports[1][1]).toEqual({ actionId: '1 10:uuid 0', err })
   expect(test.reports[2][1].action).toEqual({
-    type: 'logux/undo',
+    action: { channel: 'user/10', type: 'logux/subscribe' },
     id: '1 10:uuid 0',
     reason: 'error',
-    action: { type: 'logux/subscribe', channel: 'user/10' }
+    type: 'logux/undo'
   })
   expect(test.app.subscribers).toEqual({})
 })
@@ -952,7 +970,7 @@ it('reports about errors during channel authorization', async () => {
 it('subscribes clients', async () => {
   let test = createReporter()
   let client: any = {
-    node: { remoteSubprotocol: '0.0.0', onAdd: () => false }
+    node: { onAdd: () => false, remoteSubprotocol: '0.0.0' }
   }
   test.app.nodeIds.set('10:a:uuid', client)
   test.app.clientIds.set('10:a', client)
@@ -988,7 +1006,7 @@ it('subscribes clients', async () => {
   })
 
   await test.app.log.add(
-    { type: 'logux/subscribe', channel: 'user/10' },
+    { channel: 'user/10', type: 'logux/subscribe' },
     { id: '1 10:a:uuid 0' }
   )
   await delay(1)
@@ -1000,33 +1018,33 @@ it('subscribes clients', async () => {
     channel: 'user/10'
   })
   expect(test.reports[2][1].action).toEqual({
-    type: 'logux/processed',
-    id: '1 10:a:uuid 0'
+    id: '1 10:a:uuid 0',
+    type: 'logux/processed'
   })
   expect(test.reports[2][1].meta.clients).toEqual(['10:a'])
   expect(test.reports[2][1].meta.status).toEqual('processed')
   expect(test.app.subscribers).toEqual({
     'user/10': {
-      '10:a:uuid': { filter: true }
+      '10:a:uuid': { filters: { '{}': true } }
     }
   })
   await test.app.log.add(
-    { type: 'logux/subscribe', channel: 'posts' },
+    { channel: 'posts', type: 'logux/subscribe' },
     { id: '2 10:a:uuid 0' }
   )
   await delay(1)
 
   expect(events).toEqual(2)
   expect(test.app.subscribers).toEqual({
-    'user/10': {
-      '10:a:uuid': { filter: true }
-    },
     'posts': {
-      '10:a:uuid': { filter }
+      '10:a:uuid': { filters: { '{}': filter } }
+    },
+    'user/10': {
+      '10:a:uuid': { filters: { '{}': true } }
     }
   })
   await test.app.log.add(
-    { type: 'logux/unsubscribe', channel: 'user/10' },
+    { channel: 'user/10', type: 'logux/unsubscribe' },
     { id: '3 10:a:uuid 0' }
   )
 
@@ -1046,12 +1064,73 @@ it('subscribes clients', async () => {
     channel: 'user/10'
   })
   expect(test.reports[8][1].action).toEqual({
-    type: 'logux/processed',
-    id: '3 10:a:uuid 0'
+    id: '3 10:a:uuid 0',
+    type: 'logux/processed'
   })
   expect(test.app.subscribers).toEqual({
     posts: {
-      '10:a:uuid': { filter }
+      '10:a:uuid': { filters: { '{}': filter } }
+    }
+  })
+})
+
+it('subscribes clients with multiple filters', async () => {
+  let test = createReporter()
+  let client: any = {
+    node: { onAdd: () => false, remoteSubprotocol: '0.0.0' }
+  }
+  test.app.nodeIds.set('10:a:uuid', client)
+  test.app.clientIds.set('10:a', client)
+
+  let filter = (): boolean => false
+  test.app.channel('posts', {
+    access() {
+      return true
+    },
+    async filter() {
+      return filter
+    }
+  })
+
+  await test.app.log.add(
+    { channel: 'posts', type: 'logux/subscribe' },
+    { id: '1 10:a:uuid 0' }
+  )
+  await test.app.log.add(
+    { channel: 'posts', filter: { category: 'a' }, type: 'logux/subscribe' },
+    { id: '1 10:a:uuid 0' }
+  )
+  await test.app.log.add(
+    { channel: 'posts', filter: { category: 'b' }, type: 'logux/subscribe' },
+    { id: '1 10:a:uuid 0' }
+  )
+  await delay(1)
+  expect(test.app.subscribers).toEqual({
+    posts: {
+      '10:a:uuid': {
+        filters: {
+          '{"category":"a"}': filter,
+          '{"category":"b"}': filter,
+          '{}': filter
+        }
+      }
+    }
+  })
+
+  await test.app.log.add(
+    { channel: 'posts', type: 'logux/unsubscribe' },
+    { id: '2 10:a:uuid 0' }
+  )
+  await test.app.log.add(
+    { channel: 'posts', filter: { category: 'b' }, type: 'logux/unsubscribe' },
+    { id: '2 10:a:uuid 0' }
+  )
+  await delay(1)
+  expect(test.app.subscribers).toEqual({
+    posts: {
+      '10:a:uuid': {
+        filters: { '{"category":"a"}': filter }
+      }
     }
   })
 })
@@ -1059,7 +1138,7 @@ it('subscribes clients', async () => {
 it('cancels subscriptions on disconnect', async () => {
   let app = createServer()
   let client: any = {
-    node: { remoteSubprotocol: '0.0.0', onAdd: () => false }
+    node: { onAdd: () => false, remoteSubprotocol: '0.0.0' }
   }
   app.nodeIds.set('10:uuid', client)
   app.clientIds.set('10:uuid', client)
@@ -1084,7 +1163,7 @@ it('cancels subscriptions on disconnect', async () => {
   })
 
   await app.log.add(
-    { type: 'logux/subscribe', channel: 'test' },
+    { channel: 'test', type: 'logux/subscribe' },
     { id: '1 10:uuid 0' }
   )
   await delay(10)
@@ -1095,7 +1174,7 @@ it('cancels subscriptions on disconnect', async () => {
 it('reports about errors during channel initialization', async () => {
   let test = createReporter()
   let client: any = {
-    node: { remoteSubprotocol: '0.0.0', onAdd: () => false }
+    node: { onAdd: () => false, remoteSubprotocol: '0.0.0' }
   }
   test.app.nodeIds.set('10:uuid', client)
   test.app.clientIds.set('10:uuid', client)
@@ -1109,7 +1188,7 @@ it('reports about errors during channel initialization', async () => {
   })
 
   await test.app.log.add(
-    { type: 'logux/subscribe', channel: 'user/10' },
+    { channel: 'user/10', type: 'logux/subscribe' },
     { id: '1 10:uuid 0' }
   )
   await delay(1)
@@ -1123,10 +1202,10 @@ it('reports about errors during channel initialization', async () => {
   ])
   expect(test.reports[2][1]).toEqual({ actionId: '1 10:uuid 0', err })
   expect(test.reports[3][1].action).toEqual({
-    type: 'logux/undo',
+    action: { channel: 'user/10', type: 'logux/subscribe' },
     id: '1 10:uuid 0',
     reason: 'error',
-    action: { type: 'logux/subscribe', channel: 'user/10' }
+    type: 'logux/undo'
   })
   expect(test.app.subscribers).toEqual({})
 })
@@ -1134,7 +1213,7 @@ it('reports about errors during channel initialization', async () => {
 it('loads initial actions during subscription', async () => {
   let test = createReporter({ time: new TestTime() })
   let client: any = {
-    node: { remoteSubprotocol: '0.0.0', onAdd: () => false }
+    node: { onAdd: () => false, remoteSubprotocol: '0.0.0' }
   }
   test.app.nodeIds.set('10:uuid', client)
   test.app.clientIds.set('10:uuid', client)
@@ -1144,7 +1223,7 @@ it('loads initial actions during subscription', async () => {
   })
 
   let userLoaded = 0
-  let initializating: undefined | (() => void)
+  let initializating: (() => void) | undefined
   test.app.channel<{ id: string }>('user/:id', {
     access: () => true,
     load(ctx, action, meta) {
@@ -1160,18 +1239,18 @@ it('loads initial actions during subscription', async () => {
   })
 
   await test.app.log.add(
-    { type: 'logux/subscribe', channel: 'user/10' },
+    { channel: 'user/10', type: 'logux/subscribe' },
     { id: '1 10:uuid 0' }
   )
   await delay(1)
   expect(userLoaded).toEqual(1)
   expect(test.app.subscribers).toEqual({
     'user/10': {
-      '10:uuid': { filter: true }
+      '10:uuid': { filters: { '{}': true } }
     }
   })
   expect(test.app.log.actions()).toEqual([
-    { type: 'logux/subscribe', channel: 'user/10' }
+    { channel: 'user/10', type: 'logux/subscribe' }
   ])
   if (typeof initializating === 'undefined') {
     throw new Error('callback is not set')
@@ -1180,8 +1259,8 @@ it('loads initial actions during subscription', async () => {
   await delay(1)
 
   expect(test.app.log.actions()).toEqual([
-    { type: 'logux/subscribe', channel: 'user/10' },
-    { type: 'logux/processed', id: '1 10:uuid 0' }
+    { channel: 'user/10', type: 'logux/subscribe' },
+    { id: '1 10:uuid 0', type: 'logux/processed' }
   ])
 })
 
@@ -1189,9 +1268,9 @@ it('calls unsubscribe() channel callback with logux/unsubscribe', async () => {
   let test = createReporter({})
   let client: any = {
     node: {
-      remoteSubprotocol: '0.0.0',
+      onAdd: () => false,
       remoteHeaders: { preservedHeaders: true },
-      onAdd: () => false
+      remoteSubprotocol: '0.0.0'
     }
   }
   let nodeId = '10:uuid'
@@ -1202,7 +1281,7 @@ it('calls unsubscribe() channel callback with logux/unsubscribe', async () => {
   test.app.on('preadd', (action, meta) => {
     meta.reasons.push('test')
   })
-  let unsubscribeCallback = jest.fn()
+  let unsubscribeCallback = spy()
   test.app.channel<{ id: string }, { preservedData?: boolean }>('user/:id', {
     access(ctx) {
       ctx.data.preservedData = true
@@ -1212,42 +1291,43 @@ it('calls unsubscribe() channel callback with logux/unsubscribe', async () => {
   })
 
   await test.app.log.add(
-    { type: 'logux/subscribe', channel: 'user/10' },
+    { channel: 'user/10', type: 'logux/subscribe' },
     { id: `1 ${nodeId}` }
   )
   expect(Object.keys(test.app.subscribers)).toHaveLength(1)
 
   await test.app.log.add(
-    { type: 'logux/unsubscribe', channel: 'user/10' },
+    { channel: 'user/10', type: 'logux/unsubscribe' },
     { id: `2 ${nodeId}` }
   )
   expect(Object.keys(test.app.subscribers)).toHaveLength(0)
 
   expect(test.app.log.actions()).toEqual([
-    { type: 'logux/subscribe', channel: 'user/10' },
-    { type: 'logux/processed', id: `1 ${nodeId}` },
-    { type: 'logux/unsubscribe', channel: 'user/10' },
-    { type: 'logux/processed', id: `2 ${nodeId}` }
+    { channel: 'user/10', type: 'logux/subscribe' },
+    { id: `1 ${nodeId}`, type: 'logux/processed' },
+    { channel: 'user/10', type: 'logux/unsubscribe' },
+    { id: `2 ${nodeId}`, type: 'logux/processed' }
   ])
-  expect(unsubscribeCallback).toHaveBeenCalledTimes(1)
-  expect(unsubscribeCallback).toHaveBeenCalledWith(
-    expect.objectContaining({
-      nodeId,
-      userId,
-      clientId,
-      data: { preservedData: true },
-      headers: { preservedHeaders: true },
-      params: { id: '10' },
-      subprotocol: '0.0.0'
-    }),
-    expect.objectContaining({
-      type: 'logux/unsubscribe',
-      channel: 'user/10'
-    }),
-    expect.objectContaining({
-      status: 'processed'
-    })
-  )
+  expect(unsubscribeCallback.calls).toEqual([
+    [
+      expect.objectContaining({
+        clientId,
+        data: { preservedData: true },
+        headers: { preservedHeaders: true },
+        nodeId,
+        params: { id: '10' },
+        subprotocol: '0.0.0',
+        userId
+      }),
+      expect.objectContaining({
+        channel: 'user/10',
+        type: 'logux/unsubscribe'
+      }),
+      expect.objectContaining({
+        status: 'processed'
+      })
+    ]
+  ])
 })
 
 it('does not need type definition for own actions', async () => {
@@ -1284,7 +1364,7 @@ it('reports about useless actions', async () => {
   })
   await test.app.log.add({ type: 'unknown' }, { status: 'processed' })
   await test.app.log.add({ type: 'known' })
-  await test.app.log.add({ type: 'logux/subscribe', channel: 'a' })
+  await test.app.log.add({ channel: 'a', type: 'logux/subscribe' })
   await test.app.log.add({ type: 'known' }, { channels: ['a'] })
   await test.app.log.add({ type: 'known' }, { users: ['10'] })
   await test.app.log.add({ type: 'known' }, { clients: ['10:client'] })
@@ -1312,23 +1392,42 @@ it('has shortcuts for resend arrays', async () => {
   })
   await test.app.log.add(
     { type: 'A' },
-    { channel: 'a', user: '1', client: '1:1', node: '1:1:1' }
+    { channel: 'a', client: '1:1', node: '1:1:1', user: '1' }
   )
   expect(test.app.log.entries()).toEqual([
     [
       { type: 'A' },
       {
         added: 1,
+        channels: ['a'],
+        clients: ['1:1'],
         id: '1 server:uuid 0',
+        nodes: ['1:1:1'],
+        reasons: ['test'],
+        server: 'server:uuid',
+        status: 'waiting',
+        subprotocol: '0.0.0',
+        time: 1,
+        users: ['1']
+      }
+    ]
+  ])
+  await delay(10)
+  expect(test.app.log.entries()).toEqual([
+    [
+      { type: 'A' },
+      {
+        added: 1,
+        channels: ['a'],
+        clients: ['1:1'],
+        id: '1 server:uuid 0',
+        nodes: ['1:1:1'],
         reasons: ['test'],
         server: 'server:uuid',
         status: 'processed',
         subprotocol: '0.0.0',
-        channels: ['a'],
-        users: ['1'],
-        clients: ['1:1'],
-        nodes: ['1:1:1'],
-        time: 1
+        time: 1,
+        users: ['1']
       }
     ]
   ])
@@ -1362,7 +1461,7 @@ it('tracks action processing on add', async () => {
 })
 
 it('has shortcut API for action creators', async () => {
-  type ActionA = { type: 'A'; aValue: string }
+  type ActionA = { aValue: string; type: 'A' }
   let createA = defineAction<ActionA>('A')
 
   let processed: string[] = []
@@ -1380,29 +1479,29 @@ it('has shortcut API for action creators', async () => {
 
 it('has alias to root from file URL', () => {
   let app = new BaseServer({
+    fileUrl: import.meta.url,
     subprotocol: '1.0.0',
-    supports: '1.0.0',
-    fileUrl: import.meta.url
+    supports: '1.0.0'
   })
   expect(app.options.root).toEqual(join(fileURLToPath(import.meta.url), '..'))
 })
 
 it('has custom logger', () => {
   let app = new BaseServer({
+    fileUrl: import.meta.url,
     subprotocol: '1.0.0',
-    supports: '1.0.0',
-    fileUrl: import.meta.url
+    supports: '1.0.0'
   })
-  jest.spyOn(console, 'warn').mockImplementation(() => {})
+  spyOn(console, 'warn', () => {})
   app.logger.warn({ test: 1 }, 'test')
-  expect(console.warn).toHaveBeenCalledWith({ test: 1 }, 'test')
+  expect(calls(console.warn)).toEqual([[{ test: 1 }, 'test']])
 })
 
 it('subscribes clients manually', async () => {
   let app = new BaseServer({
+    fileUrl: import.meta.url,
     subprotocol: '1.0.0',
-    supports: '1.0.0',
-    fileUrl: import.meta.url
+    supports: '1.0.0'
   })
   let actions: Action[] = []
   app.log.on('add', (action, meta) => {
@@ -1414,22 +1513,22 @@ it('subscribes clients manually', async () => {
   await delay(10)
   expect(app.subscribers).toEqual({
     'users/10': {
-      'test:1:1': { filter: true }
+      'test:1:1': { filters: { '{}': true } }
     }
   })
-  expect(actions).toEqual([{ type: 'logux/subscribed', channel: 'users/10' }])
+  expect(actions).toEqual([{ channel: 'users/10', type: 'logux/subscribed' }])
 
   app.subscribe('test:1:1', 'users/10')
   await delay(10)
-  expect(actions).toEqual([{ type: 'logux/subscribed', channel: 'users/10' }])
+  expect(actions).toEqual([{ channel: 'users/10', type: 'logux/subscribed' }])
 })
 
-it('processes action with accessAndProcess callback', () => {
+it('processes action with accessAndProcess callback', async () => {
   let test = createReporter()
-  let accessAndProcess = jest.fn(() => {})
+  let accessAndProcess = spy()
   test.app.type('A', {
     accessAndProcess
   })
-  test.app.process({ type: 'A' })
-  expect(accessAndProcess).toHaveBeenCalledTimes(1)
+  await test.app.process({ type: 'A' })
+  expect(accessAndProcess.callCount).toEqual(1)
 })

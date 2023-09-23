@@ -1,31 +1,34 @@
-import {
+import type {
   LoguxSubscribeAction,
   SyncMapChangeAction,
+  SyncMapChangedAction,
   SyncMapCreateAction,
+  SyncMapCreatedAction,
   SyncMapDeleteAction,
-  SyncMapValues,
-  SyncMapTypes
+  SyncMapDeletedAction,
+  SyncMapTypes,
+  SyncMapValues
 } from '@logux/actions'
 
-import { BaseServer, ServerMeta } from '../base-server/index.js'
-import { Context } from '../context/index.js'
+import type { BaseServer, ServerMeta } from '../base-server/index.js'
+import type { Context } from '../context/index.js'
 
 declare const WITH_TIME: unique symbol
 
 export type WithTime<Value extends SyncMapTypes | SyncMapTypes[]> = {
-  value: Value
   time: number
+  value: Value
   [WITH_TIME]: true
 }
 
 export type WithoutTime<Value extends SyncMapTypes | SyncMapTypes[]> = {
-  value: Value
   time: undefined
+  value: Value
   [WITH_TIME]: false
 }
 
 export type SyncMapData<Value extends SyncMapValues> = { id: string } & {
-  [Key in keyof Value]: WithTime<Value[Key]> | WithoutTime<Value[Key]>
+  [Key in keyof Value]: WithoutTime<Value[Key]> | WithTime<Value[Key]>
 }
 
 /**
@@ -58,9 +61,12 @@ export function NoConflictResolution<
 interface SyncMapActionFilter<Value extends SyncMapValues> {
   (
     ctx: Context,
-    action: SyncMapCreateAction<Value> | SyncMapDeleteAction,
+    action:
+      | SyncMapChangedAction<Value>
+      | SyncMapCreatedAction<Value>
+      | SyncMapDeletedAction,
     meta: ServerMeta
-  ): Promise<boolean> | boolean
+  ): boolean | Promise<boolean>
 }
 
 interface SyncMapOperations<Value extends SyncMapValues> {
@@ -68,29 +74,12 @@ interface SyncMapOperations<Value extends SyncMapValues> {
     ctx: Context,
     id: string,
     action:
-      | SyncMapCreateAction
+      | LoguxSubscribeAction
       | SyncMapChangeAction
-      | SyncMapDeleteAction
-      | LoguxSubscribeAction,
+      | SyncMapCreateAction
+      | SyncMapDeleteAction,
     meta: ServerMeta
-  ): Promise<boolean> | boolean
-
-  load?(
-    ctx: Context,
-    id: string,
-    since: number | undefined,
-    action: LoguxSubscribeAction,
-    meta: ServerMeta
-  ): Promise<SyncMapData<Value> | false> | SyncMapData<Value> | false 
-
-  create?(
-    ctx: Context,
-    id: string,
-    fields: Value,
-    time: number,
-    action: SyncMapCreateAction<Value>,
-    meta: ServerMeta
-  ): Promise<void | boolean> | void | boolean
+  ): boolean | Promise<boolean>
 
   change?(
     ctx: Context,
@@ -99,14 +88,31 @@ interface SyncMapOperations<Value extends SyncMapValues> {
     time: number,
     action: SyncMapChangeAction<Value>,
     meta: ServerMeta
-  ): Promise<void | boolean> | void | boolean
+  ): boolean | Promise<boolean | void> | void
+
+  create?(
+    ctx: Context,
+    id: string,
+    fields: Value,
+    time: number,
+    action: SyncMapCreateAction<Value>,
+    meta: ServerMeta
+  ): boolean | Promise<boolean | void> | void
 
   delete?(
     ctx: Context,
     id: string,
     action: SyncMapDeleteAction,
     meta: ServerMeta
-  ): Promise<void | boolean> | void | boolean
+  ): boolean | Promise<boolean | void> | void
+
+  load?(
+    ctx: Context,
+    id: string,
+    since: number | undefined,
+    action: LoguxSubscribeAction,
+    meta: ServerMeta
+  ): false | Promise<false | SyncMapData<Value>> | SyncMapData<Value>
 }
 
 interface SyncMapFilterOperations<Value extends SyncMapValues> {
@@ -115,7 +121,14 @@ interface SyncMapFilterOperations<Value extends SyncMapValues> {
     filter: Partial<Value> | undefined,
     action: LoguxSubscribeAction,
     meta: ServerMeta
-  ): Promise<boolean> | boolean
+  ): boolean | Promise<boolean>
+
+  actions?(
+    ctx: Context,
+    filter: Partial<Value> | undefined,
+    action: LoguxSubscribeAction,
+    meta: ServerMeta
+  ): Promise<SyncMapActionFilter<Value>> | SyncMapActionFilter<Value> | void
 
   initial(
     ctx: Context,
@@ -124,13 +137,6 @@ interface SyncMapFilterOperations<Value extends SyncMapValues> {
     action: LoguxSubscribeAction,
     meta: ServerMeta
   ): Promise<SyncMapData<Value>[]> | SyncMapData<Value>[]
-
-  actions?(
-    ctx: Context,
-    filter: Partial<Value> | undefined,
-    action: LoguxSubscribeAction,
-    meta: ServerMeta
-  ): Promise<SyncMapActionFilter<Value>> | SyncMapActionFilter<Value> | void
 }
 
 /**
