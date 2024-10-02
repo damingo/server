@@ -1,10 +1,10 @@
 import { LoguxNotFoundError } from '@logux/actions'
 import { Log, MemoryStore, parseId, ServerConnection } from '@logux/core'
-import { promises as fs } from 'fs'
 import { createNanoEvents } from 'nanoevents'
 import { nanoid } from 'nanoid'
-import { dirname, join } from 'path'
-import { fileURLToPath } from 'url'
+import { promises as fs } from 'node:fs'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import UrlPattern from 'url-pattern'
 import { WebSocketServer } from 'ws'
 
@@ -185,7 +185,9 @@ export class BaseServer {
         this.emitter.emit('report', 'add', { action, meta })
       }
 
-      if (this.destroying) return
+      if (this.destroying && !this.actionToQueue.has(meta.id)) {
+        return
+      }
 
       if (action.type === 'logux/subscribe') {
         if (meta.server === this.nodeId) {
@@ -238,7 +240,7 @@ export class BaseServer {
 
       if (meta.status === 'waiting') {
         if (!processor) {
-          this.internalUnkownType(action, meta)
+          this.internalUnknownType(action, meta)
           return
         }
         if (processor.process) {
@@ -333,6 +335,10 @@ export class BaseServer {
     this.timeouts = {}
     this.lastTimeout = 0
 
+    this.typeToQueue = new Map()
+    this.queues = new Map()
+    this.actionToQueue = new Map()
+
     this.controls = {
       'GET /': {
         async request() {
@@ -355,24 +361,83 @@ export class BaseServer {
     this.listenNotes = {}
     bindBackendProxy(this)
 
+    let end = (actionId, queue, queueKey, ...args) => {
+      this.actionToQueue.delete(actionId)
+      if (queue.length() === 0) {
+        this.queues.delete(queueKey)
+      }
+      queue.next(...args)
+    }
+    let undoRemainingTasks = queue => {
+      let remainingTasks = queue.getQueue()
+      if (remainingTasks) {
+        for (let task of remainingTasks) {
+          this.undo(task.action, task.meta, 'error')
+          this.actionToQueue.delete(task.meta.id)
+        }
+      }
+      queue.killAndDrain()
+    }
+    this.on('error', (e, action, meta) => {
+      let queueKey = this.actionToQueue.get(meta?.id)
+      if (queueKey) {
+        let queue = this.queues.get(queueKey)
+        undoRemainingTasks(queue)
+        end(meta.id, queue, queueKey, e)
+      }
+    })
+    this.on('processed', (action, meta) => {
+      if (action.type === 'logux/undo') {
+        let queueKey = this.actionToQueue.get(action.id)
+        if (queueKey) {
+          let queue = this.queues.get(queueKey)
+          undoRemainingTasks(queue)
+          end(action.id, queue, queueKey, null, meta)
+        }
+      } else if (action.type === 'logux/processed') {
+        let queueKey = this.actionToQueue.get(action.id)
+        if (queueKey) {
+          let queue = this.queues.get(queueKey)
+          end(action.id, queue, queueKey, null, meta)
+        }
+      } else if (
+        action.type !== 'logux/subscribed' &&
+        action.type !== 'logux/unsubscribed'
+      ) {
+        let queueKey = this.actionToQueue.get(meta.id)
+        if (queueKey) {
+          let queue = this.queues.get(queueKey)
+          end(meta.id, queue, queueKey, null, meta)
+        }
+      }
+    })
+
     this.unbind.push(() => {
       for (let i of this.connected.values()) i.destroy()
       for (let i in this.timeouts) {
         clearTimeout(this.timeouts[i])
       }
     })
-    this.unbind.push(
-      () =>
-        new Promise(resolve => {
-          if (this.processing === 0) {
-            resolve()
-          } else {
-            this.on('processed', () => {
-              if (this.processing === 0) resolve()
-            })
-          }
+    this.unbind.push(() => {
+      return new Promise(resolve => {
+        if (this.processing === 0) {
+          resolve()
+        } else {
+          this.on('processed', () => {
+            if (this.processing === 0) resolve()
+          })
+        }
+      })
+    })
+    this.unbind.push(() => {
+      return Promise.allSettled(
+        [...this.queues.values()].map(queue => {
+          return new Promise(resolve => {
+            queue.drain = resolve
+          })
         })
-    )
+      )
+    })
   }
 
   addClient(connection) {
@@ -409,7 +474,7 @@ export class BaseServer {
     return [undoAction, undoMeta]
   }
 
-  channel(pattern, callbacks) {
+  channel(pattern, callbacks, options = {}) {
     normalizeChannelCallbacks(`Channel ${pattern}`, callbacks)
     let channel = Object.assign({}, callbacks)
     if (typeof pattern === 'string') {
@@ -419,6 +484,8 @@ export class BaseServer {
     } else {
       channel.regexp = pattern
     }
+
+    channel.queueName = options.queue || 'main'
     this.channels.push(channel)
   }
 
@@ -497,7 +564,7 @@ export class BaseServer {
     this.httpListener = listener
   }
 
-  internalUnkownType(action, meta) {
+  internalUnknownType(action, meta) {
     this.contexts.delete(action)
     this.log.changeMeta(meta.id, { status: 'error' })
     this.emitter.emit('report', 'unknownType', {
@@ -681,7 +748,7 @@ export class BaseServer {
         }
       }
     }
-    this.emitter.emit('unsubscribed', action, meta)
+    this.emitter.emit('unsubscribed', action, meta, clientNodeId)
     this.emitter.emit('report', 'unsubscribed', {
       actionId: meta.id,
       channel: action.channel
@@ -809,9 +876,10 @@ export class BaseServer {
                 let ctx = this.createContext(action, meta)
                 let client = this.clientIds.get(clientId)
                 for (let filter of Object.values(subscriber.filters)) {
-                  filter = typeof filter === 'function'
-                    ? await filter(ctx, action, meta)
-                    : filter
+                  filter =
+                    typeof filter === 'function'
+                      ? await filter(ctx, action, meta)
+                      : filter
                   if (filter && client) {
                     ignoreClients.add(clientId)
                     client.node.onAdd(action, meta)
@@ -948,7 +1016,10 @@ export class BaseServer {
     if (!match) this.wrongChannel(action, meta)
   }
 
-  type(name, callbacks) {
+  type(name, callbacks, options = {}) {
+    let queue = options.queue || 'main'
+    this.typeToQueue.set(name, queue)
+
     if (typeof name === 'function') name = name.type
     normalizeTypeCallbacks(`Action type ${name}`, callbacks)
 
@@ -970,7 +1041,7 @@ export class BaseServer {
   }
 
   unknownType(action, meta) {
-    this.internalUnkownType(action, meta)
+    this.internalUnknownType(action, meta)
     this.unknownTypes[meta.id] = true
   }
 

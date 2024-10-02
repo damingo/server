@@ -13,12 +13,32 @@ import type {
   ServerConnection,
   TestTime
 } from '@logux/core'
-import type { Server as HTTPServer, IncomingMessage, ServerResponse } from 'http'
 import type { Unsubscribe } from 'nanoevents'
+import type {
+  Server as HTTPServer,
+  IncomingMessage,
+  ServerResponse
+} from 'node:http'
 import type { LogFn } from 'pino'
 
 import type { ChannelContext, Context } from '../context/index.js'
 import type { ServerClient } from '../server-client/index.js'
+
+interface TypeOptions {
+  /**
+   * Name of the queue that will be used to process actions
+   * of the specified type. Default is 'main'
+   */
+  queue?: string
+}
+
+interface ChannelOptions {
+  /**
+   * Name of the queue that will be used to process channels
+   * with the specified name pattern. Default is 'main'
+   */
+  queue?: string
+}
 
 export interface ServerMeta extends Meta {
   /**
@@ -238,7 +258,7 @@ export type SendBackActions =
  * @param client Client object.
  * @returns `true` if credentials was correct
  */
-interface Authenticator<Headers extends object> {
+interface ServerAuthenticator<Headers extends object> {
   (user: AuthenticatorOptions<Headers>): boolean | Promise<boolean>
 }
 
@@ -446,7 +466,10 @@ type ActionCallbacks<
   TypeAction extends Action,
   Data extends object,
   Headers extends object
-> = (
+> = {
+  finally?: ActionFinally<TypeAction, Data, Headers>
+  resend?: Resender<TypeAction, Data, Headers>
+} & (
   | {
       access: Authorizer<TypeAction, Data, Headers>
       process?: Processor<TypeAction, Data, Headers>
@@ -454,17 +477,18 @@ type ActionCallbacks<
   | {
       accessAndProcess: Processor<TypeAction, Data, Headers>
     }
-) & {
-  finally?: ActionFinally<TypeAction, Data, Headers>
-  resend?: Resender<TypeAction, Data, Headers>
-}
+)
 
 type ChannelCallbacks<
   SubscribeAction extends Action,
   Data extends object,
   ChannelParams extends object | string[],
   Headers extends object
-> = (
+> = {
+  filter?: FilterCreator<SubscribeAction, Data, ChannelParams, Headers>
+  finally?: ChannelFinally<SubscribeAction, Data, ChannelParams, Headers>
+  unsubscribe?: ChannelUnsubscribe<Data, ChannelParams, Headers>
+} & (
   | {
       access: ChannelAuthorizer<SubscribeAction, Data, ChannelParams, Headers>
       load?: ChannelLoader<SubscribeAction, Data, ChannelParams, Headers>
@@ -477,11 +501,7 @@ type ChannelCallbacks<
         Headers
       >
     }
-) & {
-  filter?: FilterCreator<SubscribeAction, Data, ChannelParams, Headers>
-  finally?: ChannelFinally<SubscribeAction, Data, ChannelParams, Headers>
-  unsubscribe?: ChannelUnsubscribe<Data, ChannelParams, Headers>
-}
+)
 
 interface ActionReporter {
   action: Readonly<Action>
@@ -505,6 +525,7 @@ interface AuthenticationReporter {
 
 interface ReportersArguments {
   add: ActionReporter
+  addClean: ActionReporter
   authenticated: AuthenticationReporter
   clean: CleanReporter
   clientError: {
@@ -779,7 +800,7 @@ export class BaseServer<
    *
    * @param authenticator The authentication callback.
    */
-  auth(authenticator: Authenticator<Headers>): void
+  auth(authenticator: ServerAuthenticator<Headers>): void
 
   /**
    * Define the channel.
@@ -803,6 +824,7 @@ export class BaseServer<
    *
    * @param pattern Pattern for channel name.
    * @param callbacks Callback during subscription process.
+   * @param options Additional options
    */
   channel<
     ChannelParams extends object = {},
@@ -810,12 +832,14 @@ export class BaseServer<
     SubscribeAction extends LoguxSubscribeAction = LoguxSubscribeAction
   >(
     pattern: string,
-    callbacks: ChannelCallbacks<SubscribeAction, Data, ChannelParams, Headers>
+    callbacks: ChannelCallbacks<SubscribeAction, Data, ChannelParams, Headers>,
+    options?: ChannelOptions
   ): void
 
   /**
    * @param pattern Regular expression for channel name.
    * @param callbacks Callback during subscription process.
+   * @param options Additional options
    */
   channel<
     ChannelParams extends string[] = string[],
@@ -823,7 +847,8 @@ export class BaseServer<
     SubscribeAction extends LoguxSubscribeAction = LoguxSubscribeAction
   >(
     pattern: RegExp,
-    callbacks: ChannelCallbacks<SubscribeAction, Data, ChannelParams, Headers>
+    callbacks: ChannelCallbacks<SubscribeAction, Data, ChannelParams, Headers>,
+    options?: ChannelOptions
   ): void
 
   /**
@@ -975,7 +1000,7 @@ export class BaseServer<
    * @param listener Client listener.
    */
   on(
-    event: 'authenticated',
+    event: 'authenticated' | 'unauthenticated',
     listener: (client: ServerClient, latencyMilliseconds: number) => void
   ): Unsubscribe
 
@@ -1009,7 +1034,8 @@ export class BaseServer<
     event: 'unsubscribed',
     listener: (
       action: LoguxUnsubscribeAction,
-      meta: Readonly<ServerMeta>
+      meta: Readonly<ServerMeta>,
+      clientNodeId: string
     ) => void
   ): Unsubscribe
 
@@ -1120,10 +1146,12 @@ export class BaseServer<
   /**
    * @param actionCreator Action creator function.
    * @param callbacks Callbacks for action created by creator.
+   * @param options Additional options
    */
   type<Creator extends AbstractActionCreator, Data extends object = {}>(
     actionCreator: Creator,
-    callbacks: ActionCallbacks<ReturnType<Creator>, Data, Headers>
+    callbacks: ActionCallbacks<ReturnType<Creator>, Data, Headers>,
+    options?: TypeOptions
   ): void
 
   /**
@@ -1147,10 +1175,12 @@ export class BaseServer<
    *
    * @param name The action’s type or action’s type matching rule as RegExp..
    * @param callbacks Callbacks for actions with this type.
+   * @param options Additional options
    */
   type<TypeAction extends Action = AnyAction, Data extends object = {}>(
     name: RegExp | TypeAction['type'],
-    callbacks: ActionCallbacks<TypeAction, Data, Headers>
+    callbacks: ActionCallbacks<TypeAction, Data, Headers>,
+    options?: TypeOptions
   ): void
 
   /**

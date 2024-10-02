@@ -4,7 +4,7 @@ import {
   loguxProcessed,
   loguxSubscribed
 } from '@logux/actions'
-import { delay } from 'nanodelay'
+import { setTimeout } from 'node:timers/promises'
 import { afterEach, expect, it } from 'vitest'
 
 import {
@@ -22,10 +22,10 @@ type TaskValue = {
   text: string
 }
 
-type TaskRecord = TaskValue & {
+type TaskRecord = {
   finishedChanged: number
   textChanged: number
-}
+} & TaskValue
 
 let [
   createTask,
@@ -446,7 +446,7 @@ it('does not load data on creating', async () => {
     channel: 'comments/new',
     type: 'logux/subscribe'
   })
-  await delay(10)
+  await setTimeout(10)
   expect(loaded).toBe(1)
 
   await client.log.add({
@@ -454,7 +454,7 @@ it('does not load data on creating', async () => {
     creating: true,
     type: 'logux/subscribe'
   })
-  await delay(10)
+  await setTimeout(10)
   expect(loaded).toBe(1)
 })
 

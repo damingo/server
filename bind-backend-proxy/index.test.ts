@@ -1,5 +1,5 @@
-import http from 'http'
-import { delay } from 'nanodelay'
+import http from 'node:http'
+import { setTimeout } from 'node:timers/promises'
 import { afterAll, afterEach, beforeAll, beforeEach, expect, it } from 'vitest'
 
 import { BaseServer, TestServer, type TestServerOptions } from '../index.js'
@@ -67,15 +67,15 @@ type RequestOptions = {
   path?: string
 }
 
-type DataRequest = RequestOptions & {
+type DataRequest = {
   data: object
   string?: undefined
-}
+} & RequestOptions
 
-type StringRequest = RequestOptions & {
+type StringRequest = {
   data?: undefined
   string: string
-}
+} & RequestOptions
 
 function request({
   data,
@@ -135,7 +135,7 @@ let httpServer = http.createServer((req, res) => {
       let id = `"authId":"${command.authId}"`
       if (command.userId === '10' && command.token === 'good') {
         res.write('[{"answer":"authent')
-        await delay(100)
+        await setTimeout(100)
         res.end(`icated",${id},"subprotocol":"1.0.0"}]`)
       } else if (command.userId === '30' && command.cookie.token === 'good') {
         res.end(`[{"answer":"authenticated",${id},"subprotocol":"1.0.0"}]`)
@@ -163,7 +163,7 @@ let httpServer = http.createServer((req, res) => {
         res.end(`[{"answer":"error",${id},"details":"stack"}]`)
       } else if (command.action.type === 'PERROR') {
         res.write(`[{"answer":"approved",${id}}`)
-        await delay(100)
+        await setTimeout(100)
         res.end(`,{"answer":"error",${id},"details":"stack"}]`)
       } else if (command.action.type === 'BROKEN1') {
         res.end(`[{"answer":"approved",${id}}`)
@@ -191,9 +191,9 @@ let httpServer = http.createServer((req, res) => {
         ]`)
       } else if (command.action.channel === 'a') {
         res.write('[{"answer":"appro')
-        await delay(1)
+        await setTimeout(1)
         res.write(`ved",${id}}`)
-        await delay(100)
+        await setTimeout(100)
         res.write(
           `,{"answer":"action",${id},` +
             '"action":{"type":"a/load1"},"meta":{"user":10}}'
@@ -205,9 +205,9 @@ let httpServer = http.createServer((req, res) => {
         res.end(`,{"answer":"processed",${id}}]`)
       } else {
         res.write('[{"answer":"appro')
-        await delay(1)
+        await setTimeout(1)
         res.write(`ved",${id}}`)
-        await delay(100)
+        await setTimeout(100)
         res.end(`,{"answer":"processed",${id}}]`)
       }
     }
@@ -299,7 +299,7 @@ it('reports about network errors', async () => {
   })
   let client = await app.connect('10')
   client.log.add({ type: 'A' })
-  await delay(100)
+  await setTimeout(100)
 
   expect(errors).toEqual(['connect ECONNREFUSED 127.0.0.1:7111'])
   expect(app.log.actions()).toEqual([
@@ -320,7 +320,7 @@ it('reports bad HTTP answers', async () => {
   })
   let client = await app.connect('10')
   client.log.add({ type: 'NO' })
-  await delay(100)
+  await setTimeout(100)
 
   expect(errors).toEqual(['Backend responded with 404 code'])
   expect(app.log.actions()).toEqual([
@@ -471,13 +471,27 @@ it('notifies about actions and subscriptions', async () => {
   let client = await app.connect('10', { headers: { lang: 'fr' } })
   client.log.add({ type: 'A' })
   client.log.add({ channel: 'a', type: 'logux/subscribe' })
-  await delay(100)
+  await setTimeout(400)
 
   expect(app.log.actions()).toEqual([
     { type: 'A' },
-    { channel: 'a', type: 'logux/subscribe' }
+    { channel: 'a', type: 'logux/subscribe' },
+    {
+      id: '1 10:1:1 0',
+      type: 'logux/processed'
+    },
+    {
+      type: 'a/load1'
+    },
+    {
+      type: 'a/load2'
+    },
+    {
+      id: '2 10:1:1 0',
+      type: 'logux/processed'
+    }
   ])
-  expect(app.log.entries()[0][1].status).toEqual('waiting')
+  expect(app.log.entries()[0][1].status).toEqual('processed')
   expect(sent).toEqual([
     [
       'POST',
@@ -505,7 +519,7 @@ it('notifies about actions and subscriptions', async () => {
             command: 'action',
             headers: { lang: 'fr' },
             meta: {
-              added: 1,
+              added: 3,
               id: '2 10:1:1 0',
               reasons: ['test'],
               server: 'server:uuid',
@@ -519,7 +533,7 @@ it('notifies about actions and subscriptions', async () => {
       }
     ]
   ])
-  await delay(150)
+  await setTimeout(150)
 
   expect(app.log.actions()).toEqual([
     { type: 'A' },
@@ -532,10 +546,10 @@ it('notifies about actions and subscriptions', async () => {
   expect(app.log.entries()[0][1].status).toEqual('processed')
   expect(events).toEqual([
     'backendSent',
-    'backendSent',
-    'backendGranted',
     'backendGranted',
     'backendProcessed',
+    'backendSent',
+    'backendGranted',
     'backendProcessed'
   ])
   expect(processed).toEqual(0)
@@ -548,7 +562,7 @@ it('asks about action access', async () => {
   })
   let client = await app.connect('10')
   client.log.add({ type: 'BAD' })
-  await delay(50)
+  await setTimeout(50)
 
   expect(app.log.actions()).toEqual([
     {
@@ -568,7 +582,7 @@ it('reacts on unknown action', async () => {
   })
   let client = await app.connect('10')
   client.log.add({ type: 'UNKNOWN' })
-  await delay(100)
+  await setTimeout(100)
   expect(app.log.actions()).toEqual([
     {
       action: { type: 'UNKNOWN' },
@@ -589,7 +603,7 @@ it('reacts on unknown channel', async () => {
   })
   let client = await app.connect('10')
   client.log.add({ channel: 'unknown', type: 'logux/subscribe' })
-  await delay(100)
+  await setTimeout(100)
   expect(app.log.actions()).toEqual([
     { channel: 'unknown', type: 'logux/subscribe' },
     {
@@ -609,17 +623,27 @@ it('reacts on wrong backend answer', async () => {
   app.on('error', e => {
     errors.push(e.message)
   })
+
   let client = await app.connect('10')
+
   client.log.add({ type: 'EMPTY' })
+  await setTimeout(20)
   client.log.add({ type: 'BROKEN1' })
+  await setTimeout(20)
   client.log.add({ type: 'BROKEN2' })
+  await setTimeout(20)
   client.log.add({ type: 'BROKEN3' })
+  await setTimeout(20)
   client.log.add({ type: 'BROKEN4' })
+  await setTimeout(20)
   client.log.add({ type: 'BROKEN5' })
+  await setTimeout(20)
   client.log.add({ type: 'BROKEN6' })
+  await setTimeout(20)
   client.log.add({ type: 'BROKEN7' })
+  await setTimeout(20)
   client.log.add({ channel: 'resend', type: 'logux/subscribe' })
-  await delay(100)
+  await setTimeout(20)
 
   expect(errors).toEqual([
     'Empty back-end answer',
@@ -633,61 +657,61 @@ it('reacts on wrong backend answer', async () => {
     'Resend can be called on subscription'
   ])
   expect(app.log.actions()).toEqual([
-    { type: 'BROKEN1' },
-    { type: 'BROKEN2' },
-    { type: 'BROKEN6' },
-    { channel: 'resend', type: 'logux/subscribe' },
     {
       action: { type: 'EMPTY' },
       id: '1 10:1:1 0',
       reason: 'error',
       type: 'logux/undo'
     },
+    { type: 'BROKEN1' },
     {
       action: { type: 'BROKEN1' },
-      id: '2 10:1:1 0',
-      reason: 'error',
-      type: 'logux/undo'
-    },
-    {
-      action: { type: 'BROKEN2' },
       id: '3 10:1:1 0',
       reason: 'error',
       type: 'logux/undo'
     },
+    { type: 'BROKEN2' },
     {
-      action: { type: 'BROKEN3' },
-      id: '4 10:1:1 0',
-      reason: 'error',
-      type: 'logux/undo'
-    },
-    {
-      action: { type: 'BROKEN4' },
+      action: { type: 'BROKEN2' },
       id: '5 10:1:1 0',
       reason: 'error',
       type: 'logux/undo'
     },
     {
-      action: { type: 'BROKEN5' },
-      id: '6 10:1:1 0',
-      reason: 'error',
-      type: 'logux/undo'
-    },
-    {
-      action: { type: 'BROKEN6' },
+      action: { type: 'BROKEN3' },
       id: '7 10:1:1 0',
       reason: 'error',
       type: 'logux/undo'
     },
     {
-      action: { type: 'BROKEN7' },
-      id: '8 10:1:1 0',
+      action: { type: 'BROKEN4' },
+      id: '9 10:1:1 0',
       reason: 'error',
       type: 'logux/undo'
     },
     {
+      action: { type: 'BROKEN5' },
+      id: '11 10:1:1 0',
+      reason: 'error',
+      type: 'logux/undo'
+    },
+    { type: 'BROKEN6' },
+    {
+      action: { type: 'BROKEN6' },
+      id: '13 10:1:1 0',
+      reason: 'error',
+      type: 'logux/undo'
+    },
+    {
+      action: { type: 'BROKEN7' },
+      id: '15 10:1:1 0',
+      reason: 'error',
+      type: 'logux/undo'
+    },
+    { channel: 'resend', type: 'logux/subscribe' },
+    {
       action: { channel: 'resend', type: 'logux/subscribe' },
-      id: '9 10:1:1 0',
+      id: '17 10:1:1 0',
       reason: 'error',
       type: 'logux/undo'
     }
@@ -703,24 +727,25 @@ it('reacts on backend error', async () => {
   })
   let client = await app.connect('10')
   client.log.add({ type: 'AERROR' })
+  await setTimeout(150)
   client.log.add({ type: 'PERROR' })
-  await delay(220)
+  await setTimeout(150)
 
   expect(errors).toEqual([
     'Error on back-end server',
     'Error on back-end server'
   ])
   expect(app.log.actions()).toEqual([
-    { type: 'PERROR' },
     {
       action: { type: 'AERROR' },
       id: '1 10:1:1 0',
       reason: 'error',
       type: 'logux/undo'
     },
+    { type: 'PERROR' },
     {
       action: { type: 'PERROR' },
-      id: '2 10:1:1 0',
+      id: '3 10:1:1 0',
       reason: 'error',
       type: 'logux/undo'
     }
@@ -742,7 +767,7 @@ it('has bruteforce protection', async () => {
   code = await send({ commands: [], secret: 'wrong', version: 4 })
 
   expect(code).toEqual(429)
-  await delay(3050)
+  await setTimeout(3050)
 
   code = await send({ commands: [], secret: 'wrong', version: 4 })
 
@@ -756,7 +781,7 @@ it('sets meta to resend', async () => {
   })
   let client = await app.connect('10')
   client.log.add({ type: 'RESEND' })
-  await delay(50)
+  await setTimeout(50)
   expect(app.log.actions()).toEqual([
     { type: 'RESEND' },
     { id: '1 10:1:1 0', type: 'logux/processed' }
@@ -779,7 +804,7 @@ it('processes server actions', async () => {
     throw e
   })
   app.log.add({ type: 'RESEND' })
-  await delay(50)
+  await setTimeout(50)
   expect(app.log.actions()).toEqual([{ type: 'RESEND' }])
   expect(app.log.entries()[0][1].status).toEqual('processed')
 })

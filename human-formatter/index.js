@@ -1,11 +1,10 @@
-import { once } from 'events'
-import os from 'os'
+import { once } from 'node:events'
+import os from 'node:os'
+import { Transform } from 'node:stream'
 import pico from 'picocolors'
 import pino from 'pino'
 import abstractTransport from 'pino-abstract-transport'
-import { Transform } from 'stream'
 import stripAnsi from 'strip-ansi'
-import yyyymmdd from 'yyyy-mm-dd'
 
 import { mulberry32, onceXmur3 } from './utils.js'
 
@@ -39,6 +38,17 @@ const LABELS = {
 
 const COLORS = ['red', 'green', 'yellow', 'blue', 'magenta', 'cyan']
 
+function formatNow() {
+  let date = new Date()
+  let year = date.getFullYear()
+  let month = String(date.getMonth() + 1).padStart(2, '0')
+  let day = String(date.getDate()).padStart(2, '0')
+  let hour = String(date.getHours()).padStart(2, '0')
+  let minutes = String(date.getMinutes()).padStart(2, '0')
+  let seconds = String(date.getSeconds()).padStart(2, '0')
+  return `${year}-${month}-${day} ${hour}:${minutes}:${seconds}`
+}
+
 function rightPag(str, length) {
   let add = length - stripAnsi(str).length
   for (let i = 0; i < add; i++) str += ' '
@@ -47,7 +57,7 @@ function rightPag(str, length) {
 
 function label(c, type, color, labelBg, labelText, message) {
   let pagged = rightPag(c[labelBg](c[labelText](type)), 8)
-  let time = c.dim(`at ${yyyymmdd.withTime(new Date())}`)
+  let time = c.dim(`at ${formatNow()}`)
   let highlighted = message.replace(/`([^`]+)`/g, c.yellow('$1'))
   return `${pagged}${c.bold(c[color](highlighted))} ${time}`
 }

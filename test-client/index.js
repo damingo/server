@@ -1,6 +1,6 @@
 import { ClientNode, TestPair } from '@logux/core'
 import cookie from 'cookie'
-import { delay } from 'nanodelay'
+import { setTimeout } from 'node:timers/promises'
 
 import { filterMeta } from '../filter-meta/index.js'
 
@@ -18,7 +18,7 @@ export class TestClient {
     this.node = new ClientNode(this.nodeId, this.log, this.pair.left, {
       ...opts,
       fixTime: false,
-      outMap: (action, meta) => {
+      onSend(action, meta) {
         return [action, filterMeta(meta)]
       }
     })
@@ -141,7 +141,7 @@ export class TestClient {
       }
     })
     await test()
-    await delay(1)
+    await setTimeout(1)
     unbind()
     return actions
   }

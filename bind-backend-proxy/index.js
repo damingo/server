@@ -1,8 +1,8 @@
 import { LoguxError } from '@logux/core'
-import http from 'http'
-import https from 'https'
 import JSONStream from 'JSONStream'
 import { nanoid } from 'nanoid'
+import http from 'node:http'
+import https from 'node:https'
 
 const VERSION = 4
 
@@ -126,7 +126,7 @@ export function bindBackendProxy(app) {
         })
       )
     }
-    let accessResolve, accessReject
+    let accessReject, accessResolve
     accessing.set(
       meta.id,
       new Promise((resolve, reject) => {
@@ -134,7 +134,7 @@ export function bindBackendProxy(app) {
         accessReject = reject
       })
     )
-    let processResolve, processReject
+    let processReject, processResolve
     processing.set(
       meta.id,
       new Promise((resolve, reject) => {

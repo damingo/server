@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { ClientNode, Log, MemoryStore, WsConnection } from '@logux/core'
-import { delay } from 'nanodelay'
+import { setTimeout } from 'node:timers/promises'
 import WebSocket from 'ws'
 
 import { ALLOWED_META } from '../../index.js'
@@ -9,7 +9,7 @@ import { ALLOWED_META } from '../../index.js'
 let index = 0
 let stop = false
 
-function map(action, meta) {
+function onSend(action, meta) {
   let filtered = {}
   for (let i in meta) {
     if (ALLOWED_META.includes(i)) filtered[i] = meta[i]
@@ -19,7 +19,7 @@ function map(action, meta) {
 
 function randomDelay(ms) {
   let random = ms / 3
-  return delay(ms + Math.random() * random)
+  return setTimeout(ms + Math.random() * random)
 }
 
 async function tick() {
@@ -29,7 +29,7 @@ async function tick() {
   let connection = new WsConnection('ws://localhost:31337', WebSocket)
   let log = new Log({ nodeId, store: new MemoryStore() })
   let node = new ClientNode(nodeId, log, connection, {
-    outMap: map,
+    onSend,
     subprotocol: '1.0.0',
     token: 'secret'
   })
@@ -65,7 +65,7 @@ async function tick() {
 }
 
 for (let i = 0; i < 100; i++) {
-  delay(Math.random() * 10000).then(() => {
+  setTimeout(Math.random() * 10000).then(() => {
     tick()
   })
 }
